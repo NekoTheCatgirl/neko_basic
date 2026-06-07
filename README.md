@@ -15,7 +15,10 @@ A simple BASIC interpreter and REPL written in C.
 `PRINT`, `LET`, `IF`, `THEN`, `ELSE`, `GOTO`, `GOSUB`, `RETURN`, `FOR`, `TO`, `STEP`, `NEXT`, `WHILE`, `WEND`, `INPUT`, `DIM`, `END`, `STOP`, `REM`
 
 ### Graphics
-`SCREEN`, `CIRCLE`, `LINE`, `RECT`, `COLOR`, `CLEAR`, `FLIP`, `POINT`, `TEXT`, `SPRITE`, `FILLED`, `CLOSE`
+`SCREEN`, `CIRCLE`, `LINE`, `RECT`, `COLOR`, `CLEAR`, `FLIP`, `POINT`, `TEXT`, `SPRITE`, `FILLED`, `CLOSE`, `POLL`
+
+- **Sprites**: `SPRITE LOAD id, "file"`, `SPRITE DRAW id, x, y [, scale]`, `SPRITE FREE id`
+- **Input**: `POLL MOUSE xvar, yvar [, bvar]`, `POLL KEY kvar`
 
 ### Commands
 `LIST`, `RUN`, `NEW`, `LOAD`, `SAVE`

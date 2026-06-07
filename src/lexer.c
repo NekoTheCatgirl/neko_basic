@@ -65,6 +65,11 @@ static const keyword_t keywords[] = {
 	{"SPRITE",	TOKEN_SPRITE},
 	{"FILLED",	TOKEN_FILLED},
 	{"CLOSE",	TOKEN_CLOSE},
+	{"DRAW",	TOKEN_DRAW},
+	{"FREE",	TOKEN_FREE},
+	{"POLL",	TOKEN_POLL},
+	{"MOUSE",	TOKEN_MOUSE},
+	{"KEY",	TOKEN_KEY},
 };
 
 static token_type_t lookup_keyword(const char* word);

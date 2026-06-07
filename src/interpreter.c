@@ -69,6 +69,8 @@ struct interpreter_t {
     char*           window_title;
     bool            window_open;
     Color           current_color;
+    Texture2D       sprites[64];
+    bool            sprite_loaded[64];
 #endif
 };
 
@@ -89,6 +91,8 @@ static void exec_line_gfx(interpreter_t *interp);
 static void exec_rect(interpreter_t *interp, bool filled);
 static void exec_point(interpreter_t *interp);
 static void exec_text(interpreter_t *interp);
+static void exec_sprite(interpreter_t *interp);
+static void exec_poll(interpreter_t *interp);
 #endif
 
 static void interp_error(interpreter_t *interp, const char *msg);
@@ -144,6 +148,7 @@ interpreter_t *interp_init(pool_t *pool, program_t *program, vars_t *vars) {
 #ifdef NEKO_GRAPHICS
     interp->window_open = false;
     interp->current_color = WHITE;
+    memset(interp->sprite_loaded, 0, sizeof(interp->sprite_loaded));
 #endif
 
 	return interp;
@@ -207,14 +212,16 @@ void interp_eval_line(interpreter_t *interp, token_t *tokens) {
             case TOKEN_WEND:  advance(interp); exec_wend(interp);  break;
             case TOKEN_DIM: advance(interp); exec_dim(interp); break;
 #ifdef NEKO_GRAPHICS
-            case TOKEN_SCREEN: advance(interp); exec_screen(interp);            break;
-            case TOKEN_CLOSE:  advance(interp); exec_close(interp);             break;
-            case TOKEN_COLOR:  advance(interp); exec_color(interp);             break;
-            case TOKEN_CLEAR:  advance(interp); exec_clear(interp);             break;
-            case TOKEN_FLIP:   advance(interp); exec_flip(interp);              break;
-            case TOKEN_POINT:  advance(interp); exec_point(interp);             break;
-            case TOKEN_TEXT:   advance(interp); exec_text(interp);              break;
-            case TOKEN_LINE:   advance(interp); exec_line_gfx(interp);          break;
+            case TOKEN_SCREEN: advance(interp); exec_screen(interp); break;
+            case TOKEN_CLOSE:  advance(interp); exec_close(interp); break;
+            case TOKEN_COLOR:  advance(interp); exec_color(interp); break;
+            case TOKEN_CLEAR:  advance(interp); exec_clear(interp); break;
+            case TOKEN_FLIP:   advance(interp); exec_flip(interp); break;
+            case TOKEN_POINT:  advance(interp); exec_point(interp); break;
+            case TOKEN_TEXT:   advance(interp); exec_text(interp); break;
+            case TOKEN_LINE:   advance(interp); exec_line_gfx(interp); break;
+            case TOKEN_SPRITE: advance(interp); exec_sprite(interp); break;
+            case TOKEN_POLL: advance(interp); exec_poll(interp); break;
             case TOKEN_RECT:
                 advance(interp);
                 if (check(interp, TOKEN_FILLED)) {
@@ -257,6 +264,8 @@ void interp_eval_line(interpreter_t *interp, token_t *tokens) {
             case TOKEN_RECT:
             case TOKEN_CIRCLE:
             case TOKEN_FILLED:
+            case TOKEN_SPRITE:
+            case TOKEN_POLL:
                 interp_error(interp, "GRAPHICS NOT SUPPORTED");
                 break;
 #endif
@@ -274,7 +283,14 @@ void interp_eval_line(interpreter_t *interp, token_t *tokens) {
 
 void interp_free(interpreter_t *interp) {
 #ifdef NEKO_GRAPHICS
-    if (interp->window_open) CloseWindow();
+    if (interp->window_open) {
+        for (size_t i = 0; i < 64; i++) {
+            if (interp->sprite_loaded[i]) {
+                UnloadTexture(interp->sprites[i]);
+            }
+        }
+        CloseWindow();
+    }
 #endif
 	free(interp);
 }
@@ -1288,6 +1304,172 @@ static void exec_text(interpreter_t *interp) {
     }
 
     DrawText(str.value_str, (int)x.value_num, (int)y.value_num, size, interp->current_color);
+}
+
+static void exec_sprite(interpreter_t *interp) {
+    if (!check(interp, TOKEN_LOAD) && !check(interp, TOKEN_DRAW) && !check(interp, TOKEN_FREE)) {
+        interp_error(interp, "EXPECTED LOAD, DRAW OR FREE AFTER SPRITE");
+        return;
+    }
+
+    token_type_t subcmd = peek(interp)->type;
+    advance(interp);
+
+    if (subcmd == TOKEN_LOAD) {
+        if (!interp->window_open) {
+            interp_error(interp, "NO WINDOW OPEN");
+            return;
+        }
+
+        value_t id = parse_expression(interp);
+        if (interp->error) return;
+        if (!expect(interp, TOKEN_COMMA)) return;
+
+        value_t filename = parse_expression(interp);
+        if (interp->error) return;
+
+        int idx = (int)id.value_num;
+        if (idx < 0 || idx >= 64) {
+            interp_error(interp, "SPRITE ID OUT OF RANGE");
+            return;
+        }
+
+        if (interp->sprite_loaded[idx]) {
+            UnloadTexture(interp->sprites[idx]);
+        }
+
+        interp->sprites[idx]       = LoadTexture(filename.value_str);
+        interp->sprite_loaded[idx] = true;
+
+    } else if (subcmd == TOKEN_DRAW) {
+        if (!interp->window_open) {
+            interp_error(interp, "NO WINDOW OPEN");
+            return;
+        }
+
+        value_t id = parse_expression(interp);
+        if (interp->error) return;
+        if (!expect(interp, TOKEN_COMMA)) return;
+
+        value_t x = parse_expression(interp);
+        if (interp->error) return;
+        if (!expect(interp, TOKEN_COMMA)) return;
+
+        value_t y = parse_expression(interp);
+        if (interp->error) return;
+
+        // optional scale
+        float scale = 1.0f;
+        if (check(interp, TOKEN_COMMA)) {
+            advance(interp);
+            value_t s = parse_expression(interp);
+            if (interp->error) return;
+            scale = (float)s.value_num;
+        }
+
+        int idx = (int)id.value_num;
+        if (idx < 0 || idx >= 64) {
+            interp_error(interp, "SPRITE ID OUT OF RANGE");
+            return;
+        }
+
+        if (!interp->sprite_loaded[idx]) {
+            interp_error(interp, "SPRITE NOT LOADED");
+            return;
+        }
+
+        DrawTextureEx(interp->sprites[idx],
+                      (Vector2){ (float)x.value_num, (float)y.value_num },
+                      0.0f, scale, interp->current_color);
+
+    } else if (subcmd == TOKEN_FREE) {
+        value_t id = parse_expression(interp);
+        if (interp->error) return;
+
+        int idx = (int)id.value_num;
+        if (idx < 0 || idx >= 64) {
+            interp_error(interp, "SPRITE ID OUT OF RANGE");
+            return;
+        }
+
+        if (interp->sprite_loaded[idx]) {
+            UnloadTexture(interp->sprites[idx]);
+            interp->sprite_loaded[idx] = false;
+        }
+    }
+}
+
+static void exec_poll(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    if (check(interp, TOKEN_MOUSE)) {
+        advance(interp);
+
+        // get x variable name
+        if (!check(interp, TOKEN_IDENTIFIER)) {
+            interp_error(interp, "EXPECTED VARIABLE NAME");
+            return;
+        }
+        char xvar[64];
+        strncpy(xvar, peek(interp)->value, 63);
+        xvar[63] = '\0';
+        advance(interp);
+
+        if (!expect(interp, TOKEN_COMMA)) return;
+
+        // get y variable name
+        if (!check(interp, TOKEN_IDENTIFIER)) {
+            interp_error(interp, "EXPECTED VARIABLE NAME");
+            return;
+        }
+        char yvar[64];
+        strncpy(yvar, peek(interp)->value, 63);
+        yvar[63] = '\0';
+        advance(interp);
+
+        var_set_num(interp->vars, xvar, (double)GetMouseX());
+        var_set_num(interp->vars, yvar, (double)GetMouseY());
+
+        // optional button variable
+        if (check(interp, TOKEN_COMMA)) {
+            advance(interp);
+            if (!check(interp, TOKEN_IDENTIFIER)) {
+                interp_error(interp, "EXPECTED VARIABLE NAME");
+                return;
+            }
+            char bvar[64];
+            strncpy(bvar, peek(interp)->value, 63);
+            bvar[63] = '\0';
+            advance(interp);
+
+            // encode buttons as bitmask: bit 0 = left, bit 1 = right, bit 2 = middle
+            int buttons = 0;
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))   buttons |= 1;
+            if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))  buttons |= 2;
+            if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) buttons |= 4;
+            var_set_num(interp->vars, bvar, (double)buttons);
+        }
+
+    } else if (check(interp, TOKEN_KEY)) {
+        advance(interp);
+
+        if (!check(interp, TOKEN_IDENTIFIER)) {
+            interp_error(interp, "EXPECTED VARIABLE NAME");
+            return;
+        }
+        char kvar[64];
+        strncpy(kvar, peek(interp)->value, 63);
+        kvar[63] = '\0';
+        advance(interp);
+
+        var_set_num(interp->vars, kvar, (double)GetKeyPressed());
+
+    } else {
+        interp_error(interp, "EXPECTED MOUSE OR KEY AFTER POLL");
+    }
 }
 
 #endif
