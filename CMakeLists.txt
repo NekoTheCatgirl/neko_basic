@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.0)
 project(neko_basic
-        VERSION 1.1.0
+        VERSION 1.1.1
         DESCRIPTION "A simple BASIC REPL"
         LANGUAGES C
 )
