@@ -14,6 +14,9 @@ A simple BASIC interpreter and REPL written in C.
 ### Statements
 `PRINT`, `LET`, `IF`, `THEN`, `ELSE`, `GOTO`, `GOSUB`, `RETURN`, `FOR`, `TO`, `STEP`, `NEXT`, `WHILE`, `WEND`, `INPUT`, `DIM`, `END`, `STOP`, `REM`
 
+### Graphics
+`SCREEN`, `CIRCLE`, `LINE`, `RECT`, `COLOR`, `CLEAR`, `FLIP`, `POINT`, `TEXT`, `SPRITE`, `FILLED`, `CLOSE`
+
 ### Commands
 `LIST`, `RUN`, `NEW`, `LOAD`, `SAVE`
 
@@ -34,7 +37,7 @@ A simple BASIC interpreter and REPL written in C.
 ```bash
 mkdir build
 cd build
-cmake ..
+cmake .. # Add -DNEKO_BASIC_GRAPHICS=OFF to disable graphics
 cmake --build .
 ```
 
