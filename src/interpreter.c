@@ -1156,6 +1156,8 @@ static void exec_flip(interpreter_t *interp) {
 
     if (WindowShouldClose()) {
         CloseWindow();
+        free(interp->window_title);
+        interp->window_title = nullptr;
         interp->window_open = false;
         interp->running     = false;
     }
