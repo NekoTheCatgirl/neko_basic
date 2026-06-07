@@ -133,6 +133,8 @@ static void repl_save(const repl_t *repl, const char *filename) {
 			}
 			if (toks[i].type == TOKEN_STRING) {
 				fprintf(f, "\"%s\"", toks[i].value);
+			} else if (toks[i].type == TOKEN_REM) {
+				fprintf(f, "REM%s", toks[i].value);
 			} else {
 				fprintf(f, "%s", toks[i].value);
 			}

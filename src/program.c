@@ -84,6 +84,8 @@ void program_print(const program_t *program) {
 			}
 			if (cur->tokens[i].type == TOKEN_STRING) {
 				printf("\"%s\"", cur->tokens[i].value);
+			} else if (cur->tokens[i].type == TOKEN_REM) {
+				printf("REM%s", cur->tokens[i].value);
 			} else {
 				printf("%s", cur->tokens[i].value);
 			}

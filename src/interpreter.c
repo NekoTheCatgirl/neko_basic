@@ -197,6 +197,7 @@ void interp_eval_line(interpreter_t *interp, token_t *tokens) {
 
     while (!interp->error && !check(interp, TOKEN_EOF) && !check(interp, TOKEN_NEWLINE)) {
         switch (peek(interp)->type) {
+            case TOKEN_COLON: advance(interp); break;
             case TOKEN_PRINT:  advance(interp); exec_print(interp);  break;
             case TOKEN_LET:    advance(interp); exec_let(interp);    break;
             case TOKEN_IF:     advance(interp); exec_if(interp);     break;

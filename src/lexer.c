@@ -153,7 +153,16 @@ token_t* tokenize(const char* source) {
 			value[len] = '\0';
 			const token_type_t type = lookup_keyword(value);
 			if (type == TOKEN_REM) {
-				while (source[i] != '\n' && source[i] != '\0') i++;
+				char rem_value[256];
+				size_t rem_len = 0;
+				// Keep "REM" as part of the value or just the comment?
+				// The interpreter expects TOKEN_REM, so we'll store the comment part.
+				while (source[i] != '\n' && source[i] != '\0' && rem_len < 255) {
+					rem_value[rem_len++] = source[i];
+					i++;
+				}
+				rem_value[rem_len] = '\0';
+				append_token(&tokens, &count, &capacity, TOKEN_REM, rem_value);
 				continue;
 			}
 			append_token(&tokens, &count, &capacity, type, value);
