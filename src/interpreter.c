@@ -66,8 +66,9 @@ struct interpreter_t {
 	while_frame_t   while_stack[32];
 	size_t          while_top;
 #ifdef NEKO_GRAPHICS
+    char*           window_title;
     bool            window_open;
-    Color    current_color;
+    Color           current_color;
 #endif
 };
 
@@ -1052,18 +1053,22 @@ static void exec_screen(interpreter_t *interp) {
     value_t height = parse_expression(interp);
     if (interp->error) return;
 
-    // optional title
-    const char *title = "Neko BASIC";
+    interp->window_title = "Hello BASIC";
     if (check(interp, TOKEN_COMMA)) {
         advance(interp);
         value_t t = parse_expression(interp);
         if (interp->error) return;
-        title = t.value_str;
+        char *title_copy = strdup(t.value_str);
+        if (!title_copy) {
+            interp_error(interp, "OUT OF MEMORY");
+            return;
+        }
+        interp->window_title = title_copy;
     }
 
-    InitWindow((int)width.value_num, (int)height.value_num, title);
+    InitWindow((int)width.value_num, (int)height.value_num, interp->window_title);
     SetTargetFPS(60);
-    interp->window_open   = true;
+    interp->window_open = true;
     interp->current_color = WHITE;
 }
 
