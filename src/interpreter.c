@@ -1078,6 +1078,8 @@ static void exec_close(interpreter_t *interp) {
         return;
     }
     CloseWindow();
+    free(interp->window_title);
+    interp->window_title = nullptr;
     interp->window_open = false;
     interp->running     = false;
 }
