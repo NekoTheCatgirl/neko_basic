@@ -1,12 +1,14 @@
 cmake_minimum_required(VERSION 4.0)
 project(neko_basic
-        VERSION 1.0.0
+        VERSION 1.1.0
         DESCRIPTION "A simple BASIC REPL"
         LANGUAGES C
 )
 
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+
+option(NEKO_BASIC_GRAPHICS "Enable Graphics Instructions" ON)
 
 add_executable(${PROJECT_NAME}
                src/main.c
@@ -19,8 +21,16 @@ add_executable(${PROJECT_NAME}
                src/signals.c
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE m)
+find_package(raylib QUIET)
 
+if(raylib_FOUND AND NEKO_BASIC_GRAPHICS)
+	message(STATUS "Raylib found, enabling graphics support")
+	target_link_libraries(neko_basic PRIVATE raylib m)
+	target_compile_definitions(neko_basic PRIVATE NEKO_GRAPHICS)
+else()
+	message(STATUS "Raylib not found, graphics support disabled")
+	target_link_libraries(neko_basic PRIVATE m)
+endif()
 
 if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	set(CPACK_GENERATOR "NSIS")

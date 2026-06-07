@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef NEKO_GRAPHICS
+
+#include <raylib.h>
+
+#endif
+
 #include "signals.h"
 
 #define MATH_FUNC(fn) \
@@ -59,9 +65,30 @@ struct interpreter_t {
 	size_t          gosub_top;
 	while_frame_t   while_stack[32];
 	size_t          while_top;
+#ifdef NEKO_GRAPHICS
+    bool            window_open;
+    Color    current_color;
+#endif
 };
 
 /* Forward Declarations */
+
+#ifdef NEKO_GRAPHICS
+static bool interp_is_window_open(interpreter_t *interp) { return interp->window_open; }
+static void interp_set_window_open(interpreter_t *interp, bool open) { interp->window_open = open; }
+static Color interp_get_color(interpreter_t *interp) { return interp->current_color; }
+static void interp_set_color_val(interpreter_t *interp, Color c) { interp->current_color = c; }
+static void exec_screen(interpreter_t *interp);
+static void exec_close(interpreter_t *interp);
+static void exec_color(interpreter_t *interp);
+static void exec_clear(interpreter_t *interp);
+static void exec_flip(interpreter_t *interp);
+static void exec_circle(interpreter_t *interp, bool filled);
+static void exec_line_gfx(interpreter_t *interp);
+static void exec_rect(interpreter_t *interp, bool filled);
+static void exec_point(interpreter_t *interp);
+static void exec_text(interpreter_t *interp);
+#endif
 
 static void interp_error(interpreter_t *interp, const char *msg);
 static token_t *peek(interpreter_t *interp);
@@ -112,6 +139,12 @@ interpreter_t *interp_init(pool_t *pool, program_t *program, vars_t *vars) {
     interp->for_top      = 0;
     interp->gosub_top    = 0;
     interp->while_top    = 0;
+
+#ifdef NEKO_GRAPHICS
+    interp->window_open = false;
+    interp->current_color = WHITE;
+#endif
+
 	return interp;
 }
 
@@ -172,6 +205,60 @@ void interp_eval_line(interpreter_t *interp, token_t *tokens) {
             case TOKEN_WHILE: advance(interp); exec_while(interp); break;
             case TOKEN_WEND:  advance(interp); exec_wend(interp);  break;
             case TOKEN_DIM: advance(interp); exec_dim(interp); break;
+#ifdef NEKO_GRAPHICS
+            case TOKEN_SCREEN: advance(interp); exec_screen(interp);            break;
+            case TOKEN_CLOSE:  advance(interp); exec_close(interp);             break;
+            case TOKEN_COLOR:  advance(interp); exec_color(interp);             break;
+            case TOKEN_CLEAR:  advance(interp); exec_clear(interp);             break;
+            case TOKEN_FLIP:   advance(interp); exec_flip(interp);              break;
+            case TOKEN_POINT:  advance(interp); exec_point(interp);             break;
+            case TOKEN_TEXT:   advance(interp); exec_text(interp);              break;
+            case TOKEN_LINE:   advance(interp); exec_line_gfx(interp);          break;
+            case TOKEN_RECT:
+                advance(interp);
+                if (check(interp, TOKEN_FILLED)) {
+                    advance(interp);
+                    exec_rect(interp, true);
+                } else {
+                    exec_rect(interp, false);
+                }
+                break;
+            case TOKEN_CIRCLE:
+                advance(interp);
+                if (check(interp, TOKEN_FILLED)) {
+                    advance(interp);
+                    exec_circle(interp, true);
+                } else {
+                    exec_circle(interp, false);
+                }
+                break;
+            case TOKEN_FILLED:
+                advance(interp);
+                if (check(interp, TOKEN_CIRCLE)) {
+                    advance(interp);
+                    exec_circle(interp, true);
+                } else if (check(interp, TOKEN_RECT)) {
+                    advance(interp);
+                    exec_rect(interp, true);
+                } else {
+                    interp_error(interp, "EXPECTED CIRCLE OR RECT AFTER FILLED");
+                }
+                break;
+#else
+            case TOKEN_SCREEN:
+            case TOKEN_CLOSE:
+            case TOKEN_COLOR:
+            case TOKEN_CLEAR:
+            case TOKEN_FLIP:
+            case TOKEN_POINT:
+            case TOKEN_TEXT:
+            case TOKEN_LINE:
+            case TOKEN_RECT:
+            case TOKEN_CIRCLE:
+            case TOKEN_FILLED:
+                interp_error(interp, "GRAPHICS NOT SUPPORTED");
+                break;
+#endif
             case TOKEN_REM:    return; // skip rest of line
             default:
                 interp_error(interp, "SYNTAX ERROR");
@@ -185,6 +272,9 @@ void interp_eval_line(interpreter_t *interp, token_t *tokens) {
 }
 
 void interp_free(interpreter_t *interp) {
+#ifdef NEKO_GRAPHICS
+    if (interp->window_open) CloseWindow();
+#endif
 	free(interp);
 }
 
@@ -946,3 +1036,249 @@ static void exec_dim(interpreter_t *interp) {
 
     var_dim(interp->vars, name, dims, sizes);
 }
+
+#ifdef NEKO_GRAPHICS
+
+static void exec_screen(interpreter_t *interp) {
+    if (interp->window_open) {
+        interp_error(interp, "WINDOW ALREADY OPEN");
+        return;
+    }
+
+    value_t width = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t height = parse_expression(interp);
+    if (interp->error) return;
+
+    // optional title
+    const char *title = "Neko BASIC";
+    if (check(interp, TOKEN_COMMA)) {
+        advance(interp);
+        value_t t = parse_expression(interp);
+        if (interp->error) return;
+        title = t.value_str;
+    }
+
+    InitWindow((int)width.value_num, (int)height.value_num, title);
+    SetTargetFPS(60);
+    interp->window_open   = true;
+    interp->current_color = WHITE;
+}
+
+static void exec_close(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+    CloseWindow();
+    interp->window_open = false;
+    interp->running     = false;
+}
+
+static void exec_color(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    value_t r = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t g = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t b = parse_expression(interp);
+    if (interp->error) return;
+
+    // optional alpha
+    int alpha = 255;
+    if (check(interp, TOKEN_COMMA)) {
+        advance(interp);
+        value_t a = parse_expression(interp);
+        if (interp->error) return;
+        alpha = (int)a.value_num;
+    }
+
+    interp->current_color = (Color){
+        (unsigned char)r.value_num,
+        (unsigned char)g.value_num,
+        (unsigned char)b.value_num,
+        (unsigned char)alpha
+    };
+}
+
+static void exec_clear(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    // optional background color
+    Color bg = BLACK;
+    if (!check(interp, TOKEN_NEWLINE) && !check(interp, TOKEN_EOF)) {
+        value_t r = parse_expression(interp);
+        if (interp->error) return;
+        if (!expect(interp, TOKEN_COMMA)) return;
+        value_t g = parse_expression(interp);
+        if (interp->error) return;
+        if (!expect(interp, TOKEN_COMMA)) return;
+        value_t b = parse_expression(interp);
+        if (interp->error) return;
+        bg = (Color){
+            (unsigned char)r.value_num,
+            (unsigned char)g.value_num,
+            (unsigned char)b.value_num,
+            255
+        };
+    }
+
+    BeginDrawing();
+    ClearBackground(bg);
+}
+
+static void exec_flip(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+    EndDrawing();
+
+    if (WindowShouldClose()) {
+        CloseWindow();
+        interp->window_open = false;
+        interp->running     = false;
+    }
+}
+
+static void exec_circle(interpreter_t *interp, bool filled) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    value_t x = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t y = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t r = parse_expression(interp);
+    if (interp->error) return;
+
+    if (filled) {
+        DrawCircle((int)x.value_num, (int)y.value_num, (float)r.value_num, interp->current_color);
+    } else {
+        DrawCircleLines((int)x.value_num, (int)y.value_num, (float)r.value_num, interp->current_color);
+    }
+}
+
+static void exec_line_gfx(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    value_t x1 = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t y1 = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t x2 = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t y2 = parse_expression(interp);
+    if (interp->error) return;
+
+    DrawLine((int)x1.value_num, (int)y1.value_num,
+             (int)x2.value_num, (int)y2.value_num,
+             interp->current_color);
+}
+
+static void exec_rect(interpreter_t *interp, bool filled) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    value_t x = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t y = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t w = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t h = parse_expression(interp);
+    if (interp->error) return;
+
+    if (filled) {
+        DrawRectangle((int)x.value_num, (int)y.value_num,
+                      (int)w.value_num, (int)h.value_num,
+                      interp->current_color);
+    } else {
+        DrawRectangleLines((int)x.value_num, (int)y.value_num,
+                           (int)w.value_num, (int)h.value_num,
+                           interp->current_color);
+    }
+}
+
+static void exec_point(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    value_t x = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t y = parse_expression(interp);
+    if (interp->error) return;
+
+    DrawPixel((int)x.value_num, (int)y.value_num, interp->current_color);
+}
+
+static void exec_text(interpreter_t *interp) {
+    if (!interp->window_open) {
+        interp_error(interp, "NO WINDOW OPEN");
+        return;
+    }
+
+    value_t x = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t y = parse_expression(interp);
+    if (interp->error) return;
+    if (!expect(interp, TOKEN_COMMA)) return;
+
+    value_t str = parse_expression(interp);
+    if (interp->error) return;
+
+    // optional font size
+    int size = 20;
+    if (check(interp, TOKEN_COMMA)) {
+        advance(interp);
+        value_t s = parse_expression(interp);
+        if (interp->error) return;
+        size = (int)s.value_num;
+    }
+
+    DrawText(str.value_str, (int)x.value_num, (int)y.value_num, size, interp->current_color);
+}
+
+#endif

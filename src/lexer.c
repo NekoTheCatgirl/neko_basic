@@ -53,6 +53,18 @@ static const keyword_t keywords[] = {
 	{"VAL",	TOKEN_VAL},
 	{"CHR$",   TOKEN_CHR},
 	{"ASC",	TOKEN_ASC},
+	{"SCREEN",	TOKEN_SCREEN},
+	{"CIRCLE", TOKEN_CIRCLE},
+	{"LINE",	TOKEN_LINE},
+	{"RECT",	TOKEN_RECT},
+	{"COLOR",	TOKEN_COLOR},
+	{"CLEAR",	TOKEN_CLEAR},
+	{"FLIP",	TOKEN_FLIP},
+	{"POINT",	TOKEN_POINT},
+	{"TEXT",	TOKEN_TEXT},
+	{"SPRITE",	TOKEN_SPRITE},
+	{"FILLED",	TOKEN_FILLED},
+	{"CLOSE",	TOKEN_CLOSE},
 };
 
 static token_type_t lookup_keyword(const char* word);
